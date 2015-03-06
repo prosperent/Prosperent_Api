@@ -2,9 +2,11 @@
 /**
  * Prosperent API PHP Library
  *
+ * NOTE: This PHP code relies on PHP 5.2 and above.
+ *
  * NEW BSD LICENSE
  *
- * Copyright (c) 2009-2014, Prosperent, Inc.
+ * Copyright (c) 2009-2011, Prosperent, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -37,11 +39,9 @@
  * The Prosperent API Class was developed to simplify the process of
  * connecting to the Prosperent API and parsing the results.
  *
- * NOTE: This PHP code relies on PHP 5.2 and above.
- *
- * @copyright Copyright (c) 2009-2014 Prosperent, Inc. (http://prosperent.com)
+ * @copyright Copyright (c) 2009-2011 Prosperent, Inc. (http://prosperent.com)
  * @license   See above (New BSD License)
- * @example   http://prosperent.com/documentation/api View documentation on Prosperent.com
+ * @example   http://prosperent.com/affiliate/api View documentation on Prosperent.com
  * @package   Prosperent_Api
  */
 class Prosperent_Api implements Iterator
@@ -56,11 +56,14 @@ class Prosperent_Api implements Iterator
     const ENDPOINT_MERCHANT          = 'merchant';
     const ENDPOINT_BRAND             = 'brand';
     const ENDPOINT_CELEBRITY         = 'celebrity';
+    const ENDPOINT_CLICK        	 = 'click';
     const ENDPOINT_COMMISSION        = 'commission';
     const ENDPOINT_TRANSACTION       = 'transaction';
+    const ENDPOINT_PAYMENT      	 = 'payment';
     const ENDPOINT_TRENDS            = 'trends';
     const ENDPOINT_TRAVEL			 = 'travel';
     const ENDPOINT_LOCAL			 = 'local';
+    const ENDPOINT_CONTENT_ANALYZER	 = 'contentanalyzer';
 
     public static $endpoints = array(
         self::ENDPOINT_PRODUCT,
@@ -70,11 +73,14 @@ class Prosperent_Api implements Iterator
         self::ENDPOINT_MERCHANT,
         self::ENDPOINT_BRAND,
         self::ENDPOINT_CELEBRITY,
+        self::ENDPOINT_CLICK,
         self::ENDPOINT_COMMISSION,
         self::ENDPOINT_TRANSACTION,
+        self::ENDPOINT_PAYMENT,
         self::ENDPOINT_TRENDS,
         self::ENDPOINT_TRAVEL,
-        self::ENDPOINT_LOCAL
+        self::ENDPOINT_LOCAL,
+    	self::ENDPOINT_CONTENT_ANALYZER
     );
 
     public static $endpointRoutes = array(
@@ -85,11 +91,14 @@ class Prosperent_Api implements Iterator
         self::ENDPOINT_MERCHANT          => 'merchant',
         self::ENDPOINT_BRAND             => 'brand',
         self::ENDPOINT_CELEBRITY         => 'celebrity',
+        self::ENDPOINT_CLICK	         => 'clicks',
         self::ENDPOINT_COMMISSION        => 'commissions',
         self::ENDPOINT_TRANSACTION       => 'commissions/transactions',
+        self::ENDPOINT_PAYMENT			 => 'payments',
         self::ENDPOINT_TRENDS            => 'trends',
         self::ENDPOINT_TRAVEL			 => 'travel/search',
-        self::ENDPOINT_LOCAL			 => 'local/search'
+        self::ENDPOINT_LOCAL			 => 'local/search',
+    	self::ENDPOINT_CONTENT_ANALYZER  => 'content/analyzer'
     );
 
     /**
@@ -111,7 +120,7 @@ class Prosperent_Api implements Iterator
      *
      * @var string
      */
-    public static $photoUrlSize  = '160x160';
+    public static $photoUrlSize  = '250x250';
 
     /**
      * cURL options
@@ -151,6 +160,11 @@ class Prosperent_Api implements Iterator
      * @var string
      */
     protected $_commissionDateRange;
+
+    /**
+     * @var string
+     */
+    protected $_paidDateRange;
 
     /**
      * @var string
@@ -278,6 +292,11 @@ class Prosperent_Api implements Iterator
     protected $_sid;
 
     /**
+     * @var string
+     */
+    protected $_url;
+
+    /**
      * @var int
      */
     protected $_page = 1;
@@ -287,6 +306,21 @@ class Prosperent_Api implements Iterator
      */
     protected $_groupBy;
 
+    /**
+     * @var string
+     */
+    protected $_imageMaskDomain;    
+    
+    /**
+     * @var string
+     */
+    protected $_clickMaskDomain;    
+
+    /**
+     * @var string
+     */
+    protected $_imageType = 'original';    
+    
     /**
      * @var string
      */
@@ -301,6 +335,11 @@ class Prosperent_Api implements Iterator
      * @var int
      */
     protected $_imageSize;
+
+    /**
+     * @var float
+     */
+    protected $_relevancyThreshold;
 
     /**
      * @var bool
@@ -526,15 +565,9 @@ class Prosperent_Api implements Iterator
      * @var array
      */
     protected $_photoImageSizes = array(
-        '75x100',
         '100x100',
-        '150x100',
-        '120x160',
-        '160x160',
-        '240x160',
-        '180x240',
-        '240x240',
-        '360x240'
+        '250x250',
+        '500x500'
     );
 
     /**
@@ -861,6 +894,26 @@ class Prosperent_Api implements Iterator
     }
 
     /**
+     * Searches API for clicks
+     *
+     * @return array
+     */
+    public function fetchClicks()
+    {
+        return $this->fetch(self::ENDPOINT_CLICK);
+    }
+
+    /**
+     * Searches API for payments
+     *
+     * @return array
+     */
+    public function fetchPayments()
+    {
+        return $this->fetch(self::ENDPOINT_PAYMENT);
+    }
+
+    /**
      * Searches API for commissions
      *
      * @return array
@@ -992,6 +1045,16 @@ class Prosperent_Api implements Iterator
     public function fetchLocal()
     {
         return $this->fetch(self::ENDPOINT_LOCAL);
+    }
+
+    /**
+     * Search the content analyzer endpoint
+     *
+     * @return array
+     */
+    public function fetchContentanalyzer()
+    {
+    	return $this->fetch(self::ENDPOINT_CONTENT_ANALYZER);
     }
 
     /**
@@ -1278,7 +1341,7 @@ class Prosperent_Api implements Iterator
             {
                 $this->_results[$key] = $v;
 
-                foreach ($v as $node => $value)
+                foreach ((array) $v as $node => $value)
                 {
                     $node = strtolower(preg_replace('/_/', '', $node));
                     $this->_resultsNode[$node][] = $value;
@@ -1642,13 +1705,16 @@ class Prosperent_Api implements Iterator
         /*
          * set keys back in place
          */
-        $current = array_combine($this->_keys[$nodeName], $current);
+        if (is_array($current) && is_array($this->_keys[$nodeName]))
+        {
+        	$current = array_combine($this->_keys[$nodeName], $current);
+        }
 
         /*
          * set the image urls back up
          */
 
-        if (isset($current['image_url']))
+        /*if (isset($current['image_url']))
         {
             $defaultImageSize = self::$imageUrlSize;
             $imageSizes       = $this->_imageSizes;
@@ -1669,18 +1735,18 @@ class Prosperent_Api implements Iterator
             $imageUrl = $current['image_url'];
             $size = in_array(($size = $this->get_imageSize()), $imageSizes) ? $size : $defaultImageSize;
             $current['image_url'] = $this->_imageBaseUrls[0] . $size . '/' . $imageUrl;
-        }
+        }*/
 
         /*
          * set the logo urls back up
          */
-        if (isset($current['logoUrl']))
+        /*if (isset($current['logoUrl']))
         {
-            shuffle($this->_imageBaseUrls);
+            //shuffle($this->_imageBaseUrls);
             $logoUrl = $current['logoUrl'];
             $size = in_array(($size = $this->get_imageSize()), $this->_logoImageSizes) ? $size : self::$logoUrlSize;
             $current['logoUrl'] = $this->_imageBaseUrls[0] . $size . '/' . $logoUrl;
-        }
+        }*/
 
         /*
          * set the affiliate url back up
@@ -2514,6 +2580,28 @@ class Prosperent_Api implements Iterator
     }
 
     /**
+     * Get url
+     *
+     * @return null|string
+     */
+    public function get_url()
+    {
+    	return $this->_url;
+    }
+
+    /**
+     * Set url
+     *
+     * @param  string $url
+     * @return Prosperent_Api
+     */
+    public function set_url($url)
+    {
+    	$this->_url = (string) $url;
+    	return $this;
+    }
+
+    /**
      * Get page
      *
      * @return null|int
@@ -2557,6 +2645,72 @@ class Prosperent_Api implements Iterator
         return $this;
     }
 
+    /**
+     * Get clickMaskDomain
+     *
+     * @return null|int
+     */
+    public function get_clickMaskDomain()
+    {
+        return $this->_clickMaskDomain;
+    }
+    
+    /**
+     * Set clickMaskDomain
+     *
+     * @param  string $clickMaskDomain
+     * @return Prosperent_Api
+     */
+    public function set_clickMaskDomain($clickMaskDomain)
+    {
+        $this->_clickMaskDomain = (string) $clickMaskDomain;
+        return $this;
+    }    
+    
+    /**
+     * Get imageMaskDomain
+     *
+     * @return null|int
+     */
+    public function get_imageMaskDomain()
+    {
+        return $this->_imageMaskDomain;
+    }
+    
+    /**
+     * Set imageMaskDomain
+     *
+     * @param  string $imageMaskDomain
+     * @return Prosperent_Api
+     */
+    public function set_imageMaskDomain($imageMaskDomain)
+    {
+        $this->_imageMaskDomain = (string) $imageMaskDomain;
+        return $this;
+    }    
+    
+    /**
+     * Get imageType
+     *
+     * @return null|int
+     */
+    public function get_imageType()
+    {
+        return $this->_imageType;
+    }
+    
+    /**
+     * Set imageType
+     *
+     * @param  string $imageType
+     * @return Prosperent_Api
+     */
+    public function set_imageType($imageType)
+    {
+        $this->_imageType = (string) $imageType;
+        return $this;
+    }    
+    
     /**
      * Get sortBy
      *
@@ -2620,6 +2774,28 @@ class Prosperent_Api implements Iterator
     public function set_imageSize($imageSize)
     {
         $this->_imageSize = (string) $imageSize;
+        return $this;
+    }
+
+    /**
+     * Get relevancyThreshold
+     *
+     * @return null|float
+     */
+    public function get_relevancyThreshold()
+    {
+        return $this->_relevancyThreshold;
+    }
+
+    /**
+     * Set relevancyThreshold
+     *
+     * @param  float $relevancyThreshold
+     * @return Prosperent_Api
+     */
+    public function set_relevancyThreshold($relevancyThreshold)
+    {
+        $this->_relevancyThreshold = $relevancyThreshold;
         return $this;
     }
 
@@ -2890,9 +3066,9 @@ class Prosperent_Api implements Iterator
  * built in caching and decrease the number of requests
  * being made to the Prosperent API
  *
- * @copyright  Copyright (c) 2009-2014 Prosperent, Inc. (http://prosperent.com)
+ * @copyright  Copyright (c) 2009-2011 Prosperent, Inc. (http://prosperent.com)
  * @license    See above (New BSD License)
- * @example    http://prosperent.com/documentation/api View documentation on Prosperent.com
+ * @example    http://prosperent.com/affiliate/api View documentation on Prosperent.com
  * @package    Prosperent_Api
  * @subpackage Cache
  */
@@ -2991,9 +3167,9 @@ abstract class Prosperent_Api_Cache
 /**
  * Core Cache Class
  *
- * @copyright  Copyright (c) 2009-2014 Prosperent, Inc. (http://prosperent.com)
+ * @copyright  Copyright (c) 2009-2011 Prosperent, Inc. (http://prosperent.com)
  * @license    See above (New BSD License)
- * @example    http://prosperent.com/documentation/api View documentation on Prosperent.com
+ * @example    http://prosperent.com/affiliate/api View documentation on Prosperent.com
  * @package    Prosperent_Api
  * @subpackage Cache
  */
@@ -3458,9 +3634,9 @@ class Prosperent_Api_Cache_Core
 /**
  * Abstract backend class
  *
- * @copyright  Copyright (c) 2009-2014 Prosperent, Inc. (http://prosperent.com)
+ * @copyright  Copyright (c) 2009-2011 Prosperent, Inc. (http://prosperent.com)
  * @license    See above (New BSD License)
- * @example    http://prosperent.com/documentation/api View documentation on Prosperent.com
+ * @example    http://prosperent.com/affiliate/api View documentation on Prosperent.com
  * @package    Prosperent_Api
  * @subpackage Cache
  */
@@ -3628,9 +3804,9 @@ class Prosperent_Api_Cache_Backend
 /**
  * Inteface for backend classes
  *
- * @copyright  Copyright (c) 2009-2014 Prosperent, Inc. (http://prosperent.com)
+ * @copyright  Copyright (c) 2009-2011 Prosperent, Inc. (http://prosperent.com)
  * @license    See above (New BSD License)
- * @example    http://prosperent.com/documentation/api View documentation on Prosperent.com
+ * @example    http://prosperent.com/affiliate/api View documentation on Prosperent.com
  * @package    Prosperent_Api
  * @subpackage Cache_Backend
  */
@@ -3652,9 +3828,9 @@ interface Prosperent_Api_Cache_Backend_Interface
 /**
  * File caching subclass for Prosperent_Api_Cache
  *
- * @copyright  Copyright (c) 2009-2014 Prosperent, Inc. (http://prosperent.com)
+ * @copyright  Copyright (c) 2009-2011 Prosperent, Inc. (http://prosperent.com)
  * @license    See above (New BSD License)
- * @example    http://prosperent.com/documentation/api View documentation on Prosperent.com
+ * @example    http://prosperent.com/affiliate/api View documentation on Prosperent.com
  * @package    Prosperent_Api
  * @subpackage Cache_Backend
  */
@@ -4436,9 +4612,9 @@ class Prosperent_Api_Cache_Backend_File extends Prosperent_Api_Cache_Backend imp
 /**
  * Memcache subclass for Prosperent_Api_Cache
  *
- * @copyright  Copyright (c) 2009-2014 Prosperent, Inc. (http://prosperent.com)
+ * @copyright  Copyright (c) 2009-2011 Prosperent, Inc. (http://prosperent.com)
  * @license    See above (New BSD License)
- * @example    http://prosperent.com/documentation/api View documentation on Prosperent.com
+ * @example    http://prosperent.com/affiliate/api View documentation on Prosperent.com
  * @package    Prosperent_Api
  * @subpackage Cache_Memcache
  */
