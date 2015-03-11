@@ -47,7 +47,7 @@
 class Prosperent_Api implements Iterator
 {
     //constants
-    const VERSION = '2.1.9';
+    const VERSION = '2.2';
 
     const ENDPOINT_PRODUCT           = 'product';
     const ENDPOINT_UKPRODUCT         = 'ukproduct';
@@ -319,7 +319,7 @@ class Prosperent_Api implements Iterator
     /**
      * @var string
      */
-    protected $_imageType = 'original';    
+    protected $_imageType;    
     
     /**
      * @var string
@@ -1714,7 +1714,7 @@ class Prosperent_Api implements Iterator
          * set the image urls back up
          */
 
-        /*if (isset($current['image_url']))
+        if (isset($current['image_url']))
         {
             $defaultImageSize = self::$imageUrlSize;
             $imageSizes       = $this->_imageSizes;
@@ -1735,18 +1735,18 @@ class Prosperent_Api implements Iterator
             $imageUrl = $current['image_url'];
             $size = in_array(($size = $this->get_imageSize()), $imageSizes) ? $size : $defaultImageSize;
             $current['image_url'] = $this->_imageBaseUrls[0] . $size . '/' . $imageUrl;
-        }*/
+        }        
 
         /*
          * set the logo urls back up
          */
-        /*if (isset($current['logoUrl']))
+        if (isset($current['logoUrl']))
         {
-            //shuffle($this->_imageBaseUrls);
+            shuffle($this->_imageBaseUrls);
             $logoUrl = $current['logoUrl'];
             $size = in_array(($size = $this->get_imageSize()), $this->_logoImageSizes) ? $size : self::$logoUrlSize;
             $current['logoUrl'] = $this->_imageBaseUrls[0] . $size . '/' . $logoUrl;
-        }*/
+        }
 
         /*
          * set the affiliate url back up
